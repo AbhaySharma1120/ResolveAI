@@ -1,28 +1,112 @@
 import User from "../models/User.js";
+
 import generateToken from "../utils/generateToken.js";
 
-/*
-  Public student registration
-  POST /api/auth/register
-*/
+const allowedRoles = ["student", "officer", "admin"];
+
+const formatAuthenticatedUser = (user) => {
+  return {
+    id: user._id,
+    name: user.name,
+    email: user.email,
+    universityId: user.universityId,
+    department: user.department,
+    designation: user.designation,
+    role: user.role,
+    avatar: user.avatar,
+    phone: user.phone || "",
+    semester: user.semester || "",
+  };
+};
+
+const getValidationMessage = (error) => {
+  if (error?.name === "ValidationError") {
+    return (
+      Object.values(error.errors)[0]?.message || "Invalid user information"
+    );
+  }
+
+  if (error?.code === 11000) {
+    if (error.keyPattern?.email) {
+      return "An account with this email already exists";
+    }
+
+    if (error.keyPattern?.universityId) {
+      return "An account with this university ID already exists";
+    }
+
+    return "An account with these details already exists";
+  }
+
+  return null;
+};
+
+/**
+ * Public student registration.
+ *
+ * POST /api/auth/register
+ */
 export const registerStudent = async (req, res) => {
   try {
-    const { name, email, password, universityId, department } = req.body;
+    const requestBody = req.body || {};
 
-    if (!name || !email || !password || !universityId || !department) {
+    const { name, email, password, universityId, department } = requestBody;
+
+    if (
+      typeof name !== "string" ||
+      typeof email !== "string" ||
+      typeof password !== "string" ||
+      typeof universityId !== "string" ||
+      typeof department !== "string"
+    ) {
       return res.status(400).json({
         success: false,
         message: "Please provide all required fields",
       });
     }
 
+    const normalizedName = name.trim();
     const normalizedEmail = email.trim().toLowerCase();
     const normalizedUniversityId = universityId.trim().toUpperCase();
+    const normalizedDepartment = department.trim();
+
+    if (
+      !normalizedName ||
+      !normalizedEmail ||
+      !password ||
+      !normalizedUniversityId ||
+      !normalizedDepartment
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Please provide all required fields",
+      });
+    }
+
+    const emailPattern = /^\S+@\S+\.\S+$/;
+
+    if (!emailPattern.test(normalizedEmail)) {
+      return res.status(400).json({
+        success: false,
+        message: "Please enter a valid email address",
+      });
+    }
+
+    if (password.length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: "Password must contain at least 6 characters",
+      });
+    }
 
     const existingUser = await User.findOne({
       $or: [
-        { email: normalizedEmail },
-        { universityId: normalizedUniversityId },
+        {
+          email: normalizedEmail,
+        },
+        {
+          universityId: normalizedUniversityId,
+        },
       ],
     });
 
@@ -37,11 +121,11 @@ export const registerStudent = async (req, res) => {
     }
 
     const user = await User.create({
-      name,
+      name: normalizedName,
       email: normalizedEmail,
       password,
       universityId: normalizedUniversityId,
-      department,
+      department: normalizedDepartment,
       role: "student",
     });
 
@@ -51,19 +135,21 @@ export const registerStudent = async (req, res) => {
       success: true,
       message: "Student account created successfully",
       token,
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        universityId: user.universityId,
-        department: user.department,
-        designation: user.designation,
-        role: user.role,
-        avatar: user.avatar,
-      },
+      user: formatAuthenticatedUser(user),
     });
   } catch (error) {
     console.error("Register error:", error);
+
+    const validationMessage = getValidationMessage(error);
+
+    if (validationMessage) {
+      const statusCode = error?.code === 11000 ? 409 : 400;
+
+      return res.status(statusCode).json({
+        success: false,
+        message: validationMessage,
+      });
+    }
 
     return res.status(500).json({
       success: false,
@@ -72,23 +158,51 @@ export const registerStudent = async (req, res) => {
   }
 };
 
-/*
-  Login for Student, Officer and Admin
-  POST /api/auth/login
-*/
+/**
+ * Login for Student, Officer and Admin.
+ *
+ * POST /api/auth/login
+ */
 export const loginUser = async (req, res) => {
   try {
-    const { email, password, role } = req.body;
+    const requestBody = req.body || {};
 
-    if (!email || !password) {
+    const { email, password, role } = requestBody;
+
+    if (typeof email !== "string" || typeof password !== "string") {
       return res.status(400).json({
         success: false,
         message: "Email and password are required",
       });
     }
 
+    const normalizedEmail = email.trim().toLowerCase();
+
+    if (!normalizedEmail || !password) {
+      return res.status(400).json({
+        success: false,
+        message: "Email and password are required",
+      });
+    }
+
+    const emailPattern = /^\S+@\S+\.\S+$/;
+
+    if (!emailPattern.test(normalizedEmail)) {
+      return res.status(400).json({
+        success: false,
+        message: "Please enter a valid email address",
+      });
+    }
+
+    if (role && !allowedRoles.includes(role)) {
+      return res.status(400).json({
+        success: false,
+        message: "Please select a valid account role",
+      });
+    }
+
     const user = await User.findOne({
-      email: email.trim().toLowerCase(),
+      email: normalizedEmail,
     }).select("+password");
 
     if (!user) {
@@ -122,6 +236,7 @@ export const loginUser = async (req, res) => {
     }
 
     user.lastLogin = new Date();
+
     await user.save();
 
     const token = generateToken(user._id, user.role);
@@ -130,16 +245,7 @@ export const loginUser = async (req, res) => {
       success: true,
       message: "Login successful",
       token,
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        universityId: user.universityId,
-        department: user.department,
-        designation: user.designation,
-        role: user.role,
-        avatar: user.avatar,
-      },
+      user: formatAuthenticatedUser(user),
     });
   } catch (error) {
     console.error("Login error:", error);
@@ -151,13 +257,23 @@ export const loginUser = async (req, res) => {
   }
 };
 
-/*
-  Return the currently logged-in user
-  GET /api/auth/me
-*/
+/**
+ * Return the currently logged-in user.
+ *
+ * GET /api/auth/me
+ */
 export const getCurrentUser = async (req, res) => {
   try {
-    const user = await User.findById(req.user._id);
+    const userId = req.user?._id;
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: "Authentication is required",
+      });
+    }
+
+    const user = await User.findById(userId);
 
     if (!user) {
       return res.status(404).json({
@@ -166,9 +282,16 @@ export const getCurrentUser = async (req, res) => {
       });
     }
 
+    if (!user.isActive) {
+      return res.status(403).json({
+        success: false,
+        message: "Your account is inactive. Contact the administrator.",
+      });
+    }
+
     return res.status(200).json({
       success: true,
-      user,
+      user: formatAuthenticatedUser(user),
     });
   } catch (error) {
     console.error("Get current user error:", error);
@@ -180,9 +303,12 @@ export const getCurrentUser = async (req, res) => {
   }
 };
 
-/*
-  JWT logout is handled on the frontend by deleting the token.
-*/
+/**
+ * JWT logout is handled by deleting the token
+ * from localStorage on the frontend.
+ *
+ * POST /api/auth/logout
+ */
 export const logoutUser = async (req, res) => {
   return res.status(200).json({
     success: true,

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { Link } from "react-router-dom";
 
@@ -24,8 +24,11 @@ const statusFilters = ["All", "New", "Assigned", "In Progress", "Resolved"];
 function getPriorityStyle(priority) {
   const styles = {
     Critical: "bg-red-50 text-red-700 ring-red-600/10",
+
     High: "bg-orange-50 text-orange-700 ring-orange-600/10",
+
     Medium: "bg-yellow-50 text-yellow-700 ring-yellow-600/10",
+
     Low: "bg-emerald-50 text-emerald-700 ring-emerald-600/10",
   };
 
@@ -38,22 +41,27 @@ function getStatusStyle(status) {
       badge: "bg-gray-100 text-gray-700",
       line: "bg-gray-400",
     },
+
     Assigned: {
       badge: "bg-blue-50 text-blue-700",
       line: "bg-blue-500",
     },
+
     "In Progress": {
       badge: "bg-purple-50 text-purple-700",
       line: "bg-purple-500",
     },
+
     Resolved: {
       badge: "bg-emerald-50 text-emerald-700",
       line: "bg-emerald-500",
     },
+
     Rejected: {
       badge: "bg-red-50 text-red-700",
       line: "bg-red-500",
     },
+
     Reopened: {
       badge: "bg-orange-50 text-orange-700",
       line: "bg-orange-500",
@@ -81,6 +89,7 @@ function formatRelativeTime(dateValue) {
 
   const currentTime = Date.now();
   const updatedTime = new Date(dateValue).getTime();
+
   const difference = currentTime - updatedTime;
 
   const minute = 60 * 1000;
@@ -110,13 +119,16 @@ function formatRelativeTime(dateValue) {
 
 function MyComplaints() {
   const [complaints, setComplaints] = useState([]);
+
   const [searchQuery, setSearchQuery] = useState("");
+
   const [selectedStatus, setSelectedStatus] = useState("All");
 
   const [isLoading, setIsLoading] = useState(true);
+
   const [errorMessage, setErrorMessage] = useState("");
 
-  const fetchComplaints = async () => {
+  const fetchComplaints = useCallback(async () => {
     try {
       setIsLoading(true);
       setErrorMessage("");
@@ -128,19 +140,27 @@ function MyComplaints() {
         },
       });
 
-      setComplaints(response.data.complaints || []);
+      setComplaints(response.data?.complaints || []);
     } catch (error) {
+      console.error("Fetch student complaints error:", error);
+
       setErrorMessage(
         error.response?.data?.message || "Unable to retrieve your complaints.",
       );
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
-    fetchComplaints();
-  }, []);
+    const requestDelay = window.setTimeout(() => {
+      fetchComplaints();
+    }, 0);
+
+    return () => {
+      window.clearTimeout(requestDelay);
+    };
+  }, [fetchComplaints]);
 
   const statistics = useMemo(() => {
     const total = complaints.length;
@@ -179,12 +199,20 @@ function MyComplaints() {
         .join(" ")
         .toLowerCase();
 
+      const title = complaint.title?.toLowerCase() || "";
+
+      const trackingId = complaint.trackingId?.toLowerCase() || "";
+
+      const category = complaint.category?.toLowerCase() || "";
+
+      const description = complaint.description?.toLowerCase() || "";
+
       const matchesSearch =
         !normalizedSearch ||
-        complaint.title?.toLowerCase().includes(normalizedSearch) ||
-        complaint.trackingId?.toLowerCase().includes(normalizedSearch) ||
-        complaint.category?.toLowerCase().includes(normalizedSearch) ||
-        complaint.description?.toLowerCase().includes(normalizedSearch) ||
+        title.includes(normalizedSearch) ||
+        trackingId.includes(normalizedSearch) ||
+        category.includes(normalizedSearch) ||
+        description.includes(normalizedSearch) ||
         locationText.includes(normalizedSearch);
 
       const matchesStatus =
@@ -196,7 +224,6 @@ function MyComplaints() {
 
   return (
     <section className="mx-auto max-w-[1400px]">
-      {/* Heading */}
       <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-700">
@@ -221,7 +248,6 @@ function MyComplaints() {
         </Link>
       </div>
 
-      {/* Statistics */}
       <div className="mt-7 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatisticCard
           label="Total complaints"
@@ -252,7 +278,6 @@ function MyComplaints() {
         />
       </div>
 
-      {/* Search and filters */}
       <div className="mt-5 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-center">
           <div className="relative flex-1">
@@ -294,7 +319,6 @@ function MyComplaints() {
         </div>
       </div>
 
-      {/* Loading state */}
       {isLoading && (
         <div className="mt-5 grid min-h-72 place-items-center rounded-2xl border border-gray-200 bg-white shadow-sm">
           <div className="text-center">
@@ -310,7 +334,6 @@ function MyComplaints() {
         </div>
       )}
 
-      {/* Error state */}
       {!isLoading && errorMessage && (
         <div className="mt-5 rounded-2xl border border-red-200 bg-red-50 p-8 text-center">
           <AlertCircle className="mx-auto text-red-600" size={34} />
@@ -332,7 +355,6 @@ function MyComplaints() {
         </div>
       )}
 
-      {/* Complaint cards */}
       {!isLoading && !errorMessage && (
         <div className="mt-5 space-y-4">
           {filteredComplaints.map((complaint) => {
@@ -388,7 +410,7 @@ function MyComplaints() {
                       <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-xs text-gray-500">
                         <span className="flex items-center gap-2">
                           <MapPin size={15} />
-                          {location}
+                          {location || "Location unavailable"}
                         </span>
 
                         <span className="flex items-center gap-2">
@@ -479,83 +501,3 @@ function StatisticCard({ label, value, icon: Icon, iconStyle }) {
 }
 
 export default MyComplaints;
-
-/*
-  GET /api/complaints/:trackingId
-
-  Student:
-  Can access only their own complaint.
-
-  Officer and Admin:
-  Can access complaint details for management.
-*/
-export const getComplaintByTrackingId = async (
-  req,
-  res
-) => {
-  try {
-    const trackingId =
-      req.params.trackingId
-        .trim()
-        .toUpperCase();
-
-    const complaint = await Complaint.findOne({
-      trackingId,
-    })
-      .populate(
-        "student",
-        "name email universityId department designation avatar"
-      )
-      .populate(
-        "assignedOfficer",
-        "name email department designation avatar"
-      )
-      .populate(
-        "timeline.updatedBy",
-        "name role designation"
-      )
-      .populate(
-        "aiAnalysis.duplicateComplaint",
-        "trackingId title category priority status"
-      );
-
-    if (!complaint) {
-      return res.status(404).json({
-        success: false,
-        message: "Complaint not found",
-      });
-    }
-
-    /*
-      Students cannot access complaints submitted
-      by another Student.
-    */
-    if (
-      req.user.role === "student" &&
-      complaint.student._id.toString() !==
-        req.user._id.toString()
-    ) {
-      return res.status(403).json({
-        success: false,
-        message:
-          "You cannot access this complaint",
-      });
-    }
-
-    return res.status(200).json({
-      success: true,
-      complaint,
-    });
-  } catch (error) {
-    console.error(
-      "Get complaint details error:",
-      error
-    );
-
-    return res.status(500).json({
-      success: false,
-      message:
-        "Unable to retrieve complaint details",
-    });
-  }
-};

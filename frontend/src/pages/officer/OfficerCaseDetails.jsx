@@ -18,12 +18,12 @@ import {
   RefreshCw,
   Send,
   Sparkles,
-  UserRound,
 } from "lucide-react";
 
 import api from "../../services/api";
 
 const slaHoursByPriority = {
+  Urgent: 2,
   Critical: 2,
   High: 6,
   Medium: 24,
@@ -56,6 +56,17 @@ function getStoredUser() {
   }
 }
 
+function getInitials(name = "") {
+  const initials = name
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part.charAt(0).toUpperCase())
+    .join("");
+
+  return initials || "US";
+}
+
 function formatDateTime(dateValue) {
   if (!dateValue) {
     return "Unknown";
@@ -64,6 +75,19 @@ function formatDateTime(dateValue) {
   return new Intl.DateTimeFormat("en-IN", {
     dateStyle: "medium",
     timeStyle: "short",
+  }).format(new Date(dateValue));
+}
+
+function formatMessageTime(dateValue) {
+  if (!dateValue) {
+    return "";
+  }
+
+  return new Intl.DateTimeFormat("en-IN", {
+    day: "numeric",
+    month: "short",
+    hour: "numeric",
+    minute: "2-digit",
   }).format(new Date(dateValue));
 }
 
@@ -96,7 +120,7 @@ function calculateSla(complaint) {
     100,
   );
 
-  if (complaint.status === "Resolved") {
+  if (["Resolved", "Closed"].includes(complaint.status)) {
     return {
       deadline: new Date(deadlineTime),
       text: "Completed",
@@ -140,7 +164,11 @@ function getAvailableStatuses(status) {
   }
 
   if (status === "In Progress") {
-    return ["In Progress", "Resolved"];
+    return ["In Progress", "Pending Student", "Resolved"];
+  }
+
+  if (status === "Pending Student") {
+    return ["Pending Student", "In Progress", "Resolved"];
   }
 
   return [status];
@@ -161,17 +189,18 @@ function OfficerCaseDetails() {
 
   const [errorMessage, setErrorMessage] = useState("");
 
-  /*
-    Conversation messages are temporary until
-    the conversation backend is connected.
-  */
   const [message, setMessage] = useState("");
 
   const [conversation, setConversation] = useState([]);
 
+  const [isSending, setIsSending] = useState(false);
+
+  const [messageError, setMessageError] = useState("");
+
   const fetchComplaint = async () => {
     if (!complaintId) {
       setErrorMessage("Complaint tracking ID is missing.");
+
       setIsLoading(false);
       return;
     }
@@ -179,13 +208,20 @@ function OfficerCaseDetails() {
     try {
       setIsLoading(true);
       setErrorMessage("");
+      setMessageError("");
 
-      const response = await api.get(`/complaints/${complaintId}`);
+      const [complaintResponse, conversationResponse] = await Promise.all([
+        api.get(`/complaints/${complaintId}`),
 
-      const complaintData = response.data.complaint;
+        api.get(`/complaints/${complaintId}/messages`),
+      ]);
+
+      const complaintData = complaintResponse.data.complaint;
 
       setComplaint(complaintData);
       setStatus(complaintData.status);
+
+      setConversation(conversationResponse.data.messages || []);
     } catch (error) {
       setErrorMessage(
         error.response?.data?.message || "Unable to retrieve case details.",
@@ -239,9 +275,12 @@ function OfficerCaseDetails() {
 
     updateStatus(
       newStatus,
+
       newStatus === "In Progress"
         ? "Investigation has started."
-        : `Complaint status updated to ${newStatus}.`,
+        : newStatus === "Pending Student"
+          ? "Additional information is required from the student."
+          : `Complaint status updated to ${newStatus}.`,
     );
   };
 
@@ -252,27 +291,37 @@ function OfficerCaseDetails() {
     );
   };
 
-  const sendMessage = (event) => {
+  const sendMessage = async (event) => {
     event.preventDefault();
 
     const trimmedMessage = message.trim();
 
-    if (!trimmedMessage) {
+    if (!trimmedMessage || isSending) {
       return;
     }
 
-    setConversation((previousMessages) => [
-      ...previousMessages,
-      {
-        id: Date.now(),
-        sender: "officer",
-        name: officer?.name || "Officer",
-        text: trimmedMessage,
-        time: "Just now",
-      },
-    ]);
+    try {
+      setIsSending(true);
+      setMessageError("");
 
-    setMessage("");
+      const response = await api.post(`/complaints/${complaintId}/messages`, {
+        message: trimmedMessage,
+      });
+
+      setConversation((previousMessages) => [
+        ...previousMessages,
+
+        response.data.conversationMessage,
+      ]);
+
+      setMessage("");
+    } catch (error) {
+      setMessageError(
+        error.response?.data?.message || "Unable to send message.",
+      );
+    } finally {
+      setIsSending(false);
+    }
   };
 
   if (isLoading) {
@@ -391,7 +440,9 @@ function OfficerCaseDetails() {
           <select
             value={status}
             onChange={handleStatusChange}
-            disabled={isUpdating || complaint.status === "Resolved"}
+            disabled={
+              isUpdating || ["Resolved", "Closed"].includes(complaint.status)
+            }
             className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 outline-none focus:border-emerald-500 disabled:cursor-not-allowed disabled:bg-slate-100"
           >
             {availableStatuses.map((statusOption) => (
@@ -404,7 +455,10 @@ function OfficerCaseDetails() {
           <button
             type="button"
             onClick={handleMarkResolved}
-            disabled={isUpdating || complaint.status !== "In Progress"}
+            disabled={
+              isUpdating ||
+              !["In Progress", "Pending Student"].includes(complaint.status)
+            }
             title={
               complaint.status === "Assigned"
                 ? "Change the status to In Progress first"
@@ -418,7 +472,9 @@ function OfficerCaseDetails() {
               <CheckCircle2 size={18} />
             )}
 
-            {complaint.status === "Resolved" ? "Resolved" : "Mark resolved"}
+            {["Resolved", "Closed"].includes(complaint.status)
+              ? "Resolved"
+              : "Mark resolved"}
           </button>
         </div>
       </section>
@@ -434,7 +490,11 @@ function OfficerCaseDetails() {
             </p>
 
             <div className="mt-6 grid gap-3 sm:grid-cols-3">
-              <DetailItem icon={MapPin} label="Location" value={location} />
+              <DetailItem
+                icon={MapPin}
+                label="Location"
+                value={location || "Campus location"}
+              />
 
               <DetailItem
                 icon={CalendarDays}
@@ -471,7 +531,7 @@ function OfficerCaseDetails() {
                       </p>
 
                       <p className="mt-1 text-xs capitalize text-slate-500">
-                        {file.resourceType}
+                        {file.resourceType || "file"}
                       </p>
                     </div>
 
@@ -508,6 +568,10 @@ function OfficerCaseDetails() {
                   Student conversation
                 </h2>
               </div>
+
+              <p className="mt-1 text-xs text-slate-500">
+                Conversation with {complaint.student?.name || "Student"}
+              </p>
             </div>
 
             <div className="max-h-96 space-y-5 overflow-y-auto bg-slate-50/60 p-5 sm:p-6">
@@ -522,18 +586,30 @@ function OfficerCaseDetails() {
               )}
 
               {conversation.map((chat) => {
-                const isOfficer = chat.sender === "officer";
+                const senderId =
+                  chat.sender?._id || chat.sender?.id || chat.sender;
+
+                const officerId = officer?.id || officer?._id;
+
+                const isOfficer =
+                  senderId?.toString() === officerId?.toString();
+
+                const senderName =
+                  chat.sender?.name ||
+                  (isOfficer
+                    ? officer?.name
+                    : complaint.student?.name || "Student");
 
                 return (
                   <div
-                    key={chat.id}
+                    key={chat._id}
                     className={`flex gap-3 ${
                       isOfficer ? "justify-end" : "justify-start"
                     }`}
                   >
                     {!isOfficer && (
-                      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-slate-200 text-slate-600">
-                        <UserRound size={17} />
+                      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-slate-200 text-xs font-bold text-slate-600">
+                        {getInitials(senderName)}
                       </span>
                     )}
 
@@ -544,16 +620,24 @@ function OfficerCaseDetails() {
                           : "rounded-tl-md border border-slate-200 bg-white text-slate-700"
                       }`}
                     >
-                      <p className="text-xs font-bold">{chat.name}</p>
+                      <p
+                        className={`text-xs font-bold ${
+                          isOfficer ? "text-emerald-100" : "text-slate-700"
+                        }`}
+                      >
+                        {senderName}
+                      </p>
 
-                      <p className="mt-1 text-sm leading-6">{chat.text}</p>
+                      <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-6">
+                        {chat.message}
+                      </p>
 
                       <p
                         className={`mt-2 text-[11px] ${
                           isOfficer ? "text-emerald-100" : "text-slate-400"
                         }`}
                       >
-                        {chat.time}
+                        {formatMessageTime(chat.createdAt)}
                       </p>
                     </div>
                   </div>
@@ -561,31 +645,49 @@ function OfficerCaseDetails() {
               })}
             </div>
 
-            <form
-              onSubmit={sendMessage}
-              className="flex gap-2 border-t border-slate-100 p-4"
-            >
-              <input
-                type="text"
-                value={message}
-                onChange={(event) => setMessage(event.target.value)}
-                placeholder="Write a message to the student..."
-                className="min-w-0 flex-1 rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
-              />
+            {messageError && (
+              <p className="border-t border-red-100 bg-red-50 px-4 py-2 text-center text-xs font-semibold text-red-600">
+                {messageError}
+              </p>
+            )}
 
-              <button
-                type="submit"
-                disabled={!message.trim()}
-                className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-emerald-700 text-white hover:bg-emerald-800 disabled:cursor-not-allowed disabled:bg-slate-300"
-                aria-label="Send message"
+            {complaint.status === "Closed" ? (
+              <div className="border-t border-slate-100 bg-slate-50 p-4 text-center text-xs font-semibold text-slate-500">
+                This conversation is closed.
+              </div>
+            ) : (
+              <form
+                onSubmit={sendMessage}
+                className="flex gap-2 border-t border-slate-100 p-4"
               >
-                <Send size={18} />
-              </button>
-            </form>
+                <input
+                  type="text"
+                  value={message}
+                  onChange={(event) => {
+                    setMessage(event.target.value);
 
-            <p className="border-t border-slate-100 px-4 py-2 text-center text-[10px] text-slate-400">
-              Message persistence will be connected later.
-            </p>
+                    setMessageError("");
+                  }}
+                  placeholder="Write a message to the student..."
+                  maxLength={2000}
+                  disabled={isSending}
+                  className="min-w-0 flex-1 rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 disabled:cursor-not-allowed disabled:bg-slate-100"
+                />
+
+                <button
+                  type="submit"
+                  disabled={isSending || !message.trim()}
+                  className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-emerald-700 text-white transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+                  aria-label="Send message"
+                >
+                  {isSending ? (
+                    <LoaderCircle size={18} className="animate-spin" />
+                  ) : (
+                    <Send size={18} />
+                  )}
+                </button>
+              </form>
+            )}
           </article>
         </div>
 
@@ -671,7 +773,7 @@ function OfficerCaseDetails() {
             >
               <div
                 className={`h-full rounded-full ${
-                  complaint.status === "Resolved"
+                  ["Resolved", "Closed"].includes(complaint.status)
                     ? "bg-emerald-500"
                     : sla.overdue
                       ? "bg-red-500"
@@ -688,7 +790,7 @@ function OfficerCaseDetails() {
                 sla.overdue ? "text-red-700" : "text-orange-700"
               }`}
             >
-              {complaint.status === "Resolved"
+              {["Resolved", "Closed"].includes(complaint.status)
                 ? "This complaint has been marked as resolved."
                 : `Resolve or update the complaint before ${formatDateTime(
                     sla.deadline,
@@ -735,6 +837,10 @@ function OfficerCaseDetails() {
                   </div>
                 </div>
               ))}
+
+              {!complaint.timeline?.length && (
+                <p className="text-sm text-slate-500">No activity available.</p>
+              )}
             </div>
           </article>
         </aside>
@@ -762,7 +868,9 @@ function AnalysisItem({ label, value }) {
     <div className="flex items-center justify-between gap-3 text-sm">
       <span className="text-cyan-700">{label}</span>
 
-      <span className="text-right font-bold text-cyan-950">{value}</span>
+      <span className="text-right font-bold text-cyan-950">
+        {value || "Not available"}
+      </span>
     </div>
   );
 }

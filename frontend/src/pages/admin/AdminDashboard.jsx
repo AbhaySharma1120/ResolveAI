@@ -1,3 +1,5 @@
+import { useEffect, useState } from "react";
+
 import {
   AlertTriangle,
   ArrowUpRight,
@@ -11,79 +13,86 @@ import {
   Users,
 } from "lucide-react";
 
-const departmentPerformance = [
-  {
-    name: "IT Support",
-    complaints: 46,
-    resolved: 39,
-    rate: 85,
-    color: "bg-cyan-500",
-  },
-  {
-    name: "Campus Maintenance",
-    complaints: 38,
-    resolved: 29,
-    rate: 76,
-    color: "bg-violet-500",
-  },
-  {
-    name: "Academic Office",
-    complaints: 27,
-    resolved: 24,
-    rate: 89,
-    color: "bg-emerald-500",
-  },
-  {
-    name: "Hostel Administration",
-    complaints: 32,
-    resolved: 23,
-    rate: 72,
-    color: "bg-amber-500",
-  },
-];
-
-const recentActivity = [
-  {
-    title: "Urgent complaint escalated",
-    detail: "RA-1058 · Electrical hazard near Lab 204",
-    time: "5 minutes ago",
-    icon: AlertTriangle,
-    style: "bg-red-50 text-red-700",
-  },
-  {
-    title: "New officer account created",
-    detail: "Vikram Singh · Campus Maintenance",
-    time: "22 minutes ago",
-    icon: Users,
-    style: "bg-cyan-50 text-cyan-700",
-  },
-  {
-    title: "Complaint marked resolved",
-    detail: "RA-1051 · Water leakage near hostel stairs",
-    time: "36 minutes ago",
-    icon: CheckCircle2,
-    style: "bg-emerald-50 text-emerald-700",
-  },
-  {
-    title: "AI classification corrected",
-    detail: "RA-1048 · Category changed to Academic",
-    time: "1 hour ago",
-    icon: Bot,
-    style: "bg-violet-50 text-violet-700",
-  },
-];
-
-const weeklyData = [
-  { day: "Mon", received: 34, resolved: 25 },
-  { day: "Tue", received: 46, resolved: 38 },
-  { day: "Wed", received: 41, resolved: 35 },
-  { day: "Thu", received: 55, resolved: 44 },
-  { day: "Fri", received: 49, resolved: 43 },
-  { day: "Sat", received: 28, resolved: 24 },
-  { day: "Sun", received: 19, resolved: 17 },
-];
+import api from "../../services/api";
 
 function AdminDashboard() {
+  const [dashboard, setDashboard] = useState({
+    summary: {
+      totalComplaints: 0,
+      activeComplaints: 0,
+      resolvedComplaints: 0,
+      resolutionRate: 0,
+      totalUsers: 0,
+      activeUsers: 0,
+      totalDepartments: 0,
+    },
+    weeklyData: [],
+    departmentPerformance: [],
+    recentActivity: [],
+  });
+
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    const fetchDashboard = async () => {
+      try {
+        setLoading(true);
+        setError("");
+
+        const response = await api.get("/dashboard/admin");
+
+        setDashboard(response.data);
+      } catch (requestError) {
+        console.error("Dashboard request failed:", requestError);
+
+        setError(
+          requestError.response?.data?.message || "Unable to load dashboard",
+        );
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchDashboard();
+  }, []);
+
+  const { summary, weeklyData, departmentPerformance, recentActivity } =
+    dashboard;
+
+  const maximumWeeklyValue = Math.max(
+    ...weeklyData.flatMap((item) => [item.received, item.resolved]),
+    1,
+  );
+
+  if (loading) {
+    return (
+      <div className="grid min-h-[60vh] place-items-center">
+        <div className="text-center">
+          <span className="mx-auto block h-10 w-10 animate-spin rounded-full border-4 border-emerald-100 border-t-emerald-700" />
+
+          <p className="mt-4 text-sm font-semibold text-slate-500">
+            Loading dashboard...
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="rounded-3xl border border-red-200 bg-red-50 p-8 text-center">
+        <AlertTriangle size={32} className="mx-auto text-red-500" />
+
+        <h2 className="mt-4 font-bold text-red-800">
+          Dashboard could not be loaded
+        </h2>
+
+        <p className="mt-2 text-sm text-red-600">{error}</p>
+      </div>
+    );
+  }
+
   return (
     <div className="mx-auto w-full max-w-7xl space-y-6">
       {/* Heading */}
@@ -99,7 +108,7 @@ function AdminDashboard() {
           </h1>
 
           <p className="mt-2 text-sm text-slate-500">
-            Monitor complaints, departments, users and AI performance.
+            Monitor complaints, departments, users and system performance.
           </p>
         </div>
 
@@ -113,39 +122,43 @@ function AdminDashboard() {
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <SummaryCard
           title="Total Complaints"
-          value="1,284"
-          information="+8.4% this month"
+          value={formatNumber(summary.totalComplaints)}
+          information={`${formatNumber(
+            summary.resolvedComplaints,
+          )} complaints resolved`}
           icon={FileText}
           style="bg-cyan-50 text-cyan-700"
         />
 
         <SummaryCard
           title="Active Complaints"
-          value="143"
-          information="18 require attention"
+          value={formatNumber(summary.activeComplaints)}
+          information="Currently requiring attention"
           icon={Clock3}
           style="bg-orange-50 text-orange-700"
         />
 
         <SummaryCard
           title="Resolution Rate"
-          value="86.7%"
-          information="+3.2% from last month"
+          value={`${summary.resolutionRate}%`}
+          information={`${formatNumber(
+            summary.resolvedComplaints,
+          )} of ${formatNumber(summary.totalComplaints)} resolved`}
           icon={TrendingUp}
           style="bg-emerald-50 text-emerald-700"
         />
 
         <SummaryCard
           title="Registered Users"
-          value="4,832"
-          information="126 active today"
+          value={formatNumber(summary.totalUsers)}
+          information={`${formatNumber(summary.activeUsers)} active accounts`}
           icon={Users}
           style="bg-violet-50 text-violet-700"
         />
       </section>
 
       <section className="grid gap-5 xl:grid-cols-[1.55fr_1fr]">
-        {/* Weekly complaints chart */}
+        {/* Weekly complaint chart */}
         <article className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
@@ -154,7 +167,7 @@ function AdminDashboard() {
               </h2>
 
               <p className="mt-1 text-sm text-slate-500">
-                Received and resolved complaints
+                Complaints received and resolved during the last seven days
               </p>
             </div>
 
@@ -171,32 +184,48 @@ function AdminDashboard() {
             </div>
           </div>
 
-          <div className="mt-8 flex h-64 items-end justify-between gap-2 border-b border-slate-200 sm:gap-5">
-            {weeklyData.map((item) => (
-              <div
-                key={item.day}
-                className="flex h-full flex-1 flex-col items-center justify-end"
-              >
-                <div className="flex h-[215px] w-full items-end justify-center gap-1 sm:gap-2">
-                  <div
-                    className="w-3 rounded-t-lg bg-slate-900 transition hover:bg-slate-700 sm:w-6"
-                    style={{ height: `${item.received * 3.5}px` }}
-                    title={`${item.received} received`}
-                  />
+          {weeklyData.length > 0 ? (
+            <div className="mt-8 flex h-64 items-end justify-between gap-2 border-b border-slate-200 sm:gap-5">
+              {weeklyData.map((item, index) => (
+                <div
+                  key={`${item.day}-${index}`}
+                  className="flex h-full flex-1 flex-col items-center justify-end"
+                >
+                  <div className="flex h-[215px] w-full items-end justify-center gap-1 sm:gap-2">
+                    <div
+                      className="w-3 min-h-[2px] rounded-t-lg bg-slate-900 transition hover:bg-slate-700 sm:w-6"
+                      style={{
+                        height: `${
+                          (item.received / maximumWeeklyValue) * 190
+                        }px`,
+                      }}
+                      title={`${item.received} received`}
+                    />
 
-                  <div
-                    className="w-3 rounded-t-lg bg-emerald-500 transition hover:bg-emerald-600 sm:w-6"
-                    style={{ height: `${item.resolved * 3.5}px` }}
-                    title={`${item.resolved} resolved`}
-                  />
+                    <div
+                      className="w-3 min-h-[2px] rounded-t-lg bg-emerald-500 transition hover:bg-emerald-600 sm:w-6"
+                      style={{
+                        height: `${
+                          (item.resolved / maximumWeeklyValue) * 190
+                        }px`,
+                      }}
+                      title={`${item.resolved} resolved`}
+                    />
+                  </div>
+
+                  <span className="py-3 text-xs font-semibold text-slate-500">
+                    {item.day}
+                  </span>
                 </div>
-
-                <span className="py-3 text-xs font-semibold text-slate-500">
-                  {item.day}
-                </span>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          ) : (
+            <EmptyState
+              icon={FileText}
+              title="No weekly activity"
+              description="Complaint activity will appear here."
+            />
+          )}
         </article>
 
         {/* System health */}
@@ -204,9 +233,8 @@ function AdminDashboard() {
           <div className="flex items-center justify-between">
             <div>
               <h2 className="font-bold">System health</h2>
-              <p className="mt-1 text-sm text-slate-400">
-                Live platform services
-              </p>
+
+              <p className="mt-1 text-sm text-slate-400">Platform services</p>
             </div>
 
             <span className="grid h-10 w-10 place-items-center rounded-xl bg-emerald-500/15 text-emerald-400">
@@ -218,44 +246,59 @@ function AdminDashboard() {
             <HealthItem
               name="Complaint API"
               value="Operational"
-              percentage="99.9%"
+              percentage="Online"
+            />
+
+            <HealthItem name="Database" value="Connected" percentage="Online" />
+
+            <HealthItem
+              name="Authentication"
+              value="Operational"
+              percentage="Online"
             />
 
             <HealthItem
-              name="Database"
-              value="Operational"
-              percentage="99.8%"
-            />
-
-            <HealthItem
-              name="AI Classification"
-              value="Operational"
-              percentage="98.7%"
-            />
-
-            <HealthItem
-              name="Notification Service"
-              value="Operational"
-              percentage="99.5%"
+              name="Authorization"
+              value="Role protected"
+              percentage="Secure"
             />
           </div>
 
           <div className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-4">
             <div className="flex items-center gap-2 text-sm font-semibold text-emerald-300">
               <Bot size={17} />
-              AI processing
+              Complaint processing
             </div>
 
-            <div className="mt-3 flex items-end justify-between">
+            <div className="mt-3 flex items-end justify-between gap-4">
               <div>
-                <p className="text-2xl font-bold">2,946</p>
+                <p className="text-2xl font-bold">
+                  {formatNumber(summary.totalComplaints)}
+                </p>
+
                 <p className="mt-1 text-xs text-slate-400">
-                  Requests this month
+                  Total complaints processed
                 </p>
               </div>
 
               <span className="text-sm font-semibold text-emerald-400">
-                97.4% accurate
+                {summary.resolutionRate}% resolved
+              </span>
+            </div>
+          </div>
+
+          <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold">Active departments</p>
+
+                <p className="mt-1 text-xs text-slate-400">
+                  Available for complaint assignment
+                </p>
+              </div>
+
+              <span className="text-2xl font-bold text-cyan-300">
+                {formatNumber(summary.totalDepartments)}
               </span>
             </div>
           </div>
@@ -263,7 +306,7 @@ function AdminDashboard() {
       </section>
 
       <section className="grid gap-5 xl:grid-cols-[1.35fr_1fr]">
-        {/* Departments */}
+        {/* Department performance */}
         <article className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
           <div className="flex items-center justify-between gap-3">
             <div>
@@ -276,37 +319,53 @@ function AdminDashboard() {
               </p>
             </div>
 
-            <Building2 size={21} className="text-emerald-700" />
+            <span className="grid h-10 w-10 place-items-center rounded-xl bg-emerald-50 text-emerald-700">
+              <Building2 size={20} />
+            </span>
           </div>
 
-          <div className="mt-6 space-y-5">
-            {departmentPerformance.map((department) => (
-              <div key={department.name}>
-                <div className="flex items-center justify-between gap-4">
-                  <div>
-                    <p className="text-sm font-semibold text-slate-800">
-                      {department.name}
-                    </p>
+          {departmentPerformance.length > 0 ? (
+            <div className="mt-6 space-y-5">
+              {departmentPerformance.map((department) => (
+                <div key={department.id || department.name}>
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-slate-800">
+                        {department.name}
+                      </p>
 
-                    <p className="mt-1 text-xs text-slate-500">
-                      {department.resolved} of {department.complaints} resolved
-                    </p>
+                      <p className="mt-1 text-xs text-slate-500">
+                        {department.resolved} of {department.complaints}{" "}
+                        resolved
+                      </p>
+                    </div>
+
+                    <span className="shrink-0 text-sm font-bold text-slate-800">
+                      {department.rate}%
+                    </span>
                   </div>
 
-                  <span className="text-sm font-bold text-slate-800">
-                    {department.rate}%
-                  </span>
+                  <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-100">
+                    <div
+                      className="h-full rounded-full bg-emerald-500 transition-all duration-500"
+                      style={{
+                        width: `${Math.min(
+                          Math.max(department.rate, 0),
+                          100,
+                        )}%`,
+                      }}
+                    />
+                  </div>
                 </div>
-
-                <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-100">
-                  <div
-                    className={`h-full rounded-full ${department.color}`}
-                    style={{ width: `${department.rate}%` }}
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          ) : (
+            <EmptyState
+              icon={Building2}
+              title="No department data"
+              description="Add departments and assign complaints to see their performance."
+            />
+          )}
         </article>
 
         {/* Recent activity */}
@@ -314,49 +373,64 @@ function AdminDashboard() {
           <div className="flex items-center justify-between">
             <div>
               <h2 className="font-bold text-slate-900">Recent activity</h2>
+
               <p className="mt-1 text-sm text-slate-500">
-                Latest administrative events
+                Latest complaint and user events
               </p>
             </div>
 
             <button
               type="button"
-              className="grid h-9 w-9 place-items-center rounded-xl text-slate-400 hover:bg-slate-100 hover:text-slate-700"
-              aria-label="View activity"
+              className="grid h-9 w-9 place-items-center rounded-xl text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+              aria-label="View recent activity"
+              title="Recent activity"
             >
               <ArrowUpRight size={18} />
             </button>
           </div>
 
-          <div className="mt-5 space-y-5">
-            {recentActivity.map((activity) => {
-              const Icon = activity.icon;
+          {recentActivity.length > 0 ? (
+            <div className="mt-5 space-y-5">
+              {recentActivity.map((activity) => {
+                const activityDisplay = getActivityDisplay(activity);
 
-              return (
-                <div key={activity.title} className="flex gap-3">
-                  <span
-                    className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl ${activity.style}`}
+                const Icon = activityDisplay.icon;
+
+                return (
+                  <div
+                    key={`${activity.type}-${activity.id}`}
+                    className="flex gap-3"
                   >
-                    <Icon size={18} />
-                  </span>
+                    <span
+                      className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl ${activityDisplay.style}`}
+                    >
+                      <Icon size={18} />
+                    </span>
 
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold text-slate-800">
-                      {activity.title}
-                    </p>
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-slate-800">
+                        {activity.title}
+                      </p>
 
-                    <p className="mt-1 truncate text-xs text-slate-500">
-                      {activity.detail}
-                    </p>
+                      <p className="mt-1 truncate text-xs text-slate-500">
+                        {activity.detail}
+                      </p>
 
-                    <p className="mt-1 text-[11px] text-slate-400">
-                      {activity.time}
-                    </p>
+                      <p className="mt-1 text-[11px] text-slate-400">
+                        {formatTimeAgo(activity.date)}
+                      </p>
+                    </div>
                   </div>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          ) : (
+            <EmptyState
+              icon={Clock3}
+              title="No recent activity"
+              description="Recent complaint and account activity will appear here."
+            />
+          )}
         </article>
       </section>
     </div>
@@ -367,14 +441,16 @@ function SummaryCard({ title, value, information, icon: Icon, style }) {
   return (
     <article className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
       <div className="flex items-start justify-between gap-3">
-        <div>
+        <div className="min-w-0">
           <p className="text-sm text-slate-500">{title}</p>
+
           <p className="mt-3 text-3xl font-bold text-slate-900">{value}</p>
+
           <p className="mt-2 text-xs text-slate-500">{information}</p>
         </div>
 
         <span
-          className={`grid h-11 w-11 place-items-center rounded-2xl ${style}`}
+          className={`grid h-11 w-11 shrink-0 place-items-center rounded-2xl ${style}`}
         >
           <Icon size={21} />
         </span>
@@ -386,16 +462,113 @@ function SummaryCard({ title, value, information, icon: Icon, style }) {
 function HealthItem({ name, value, percentage }) {
   return (
     <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 p-3">
-      <span className="h-2.5 w-2.5 rounded-full bg-emerald-400" />
+      <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-emerald-400" />
 
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-semibold">{name}</p>
+
         <p className="mt-1 text-xs text-slate-400">{value}</p>
       </div>
 
-      <span className="text-xs font-bold text-emerald-300">{percentage}</span>
+      <span className="shrink-0 text-xs font-bold text-emerald-300">
+        {percentage}
+      </span>
     </div>
   );
+}
+
+function EmptyState({ icon: Icon, title, description }) {
+  return (
+    <div className="py-12 text-center">
+      <span className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-slate-100 text-slate-400">
+        <Icon size={22} />
+      </span>
+
+      <h3 className="mt-4 text-sm font-bold text-slate-700">{title}</h3>
+
+      <p className="mx-auto mt-2 max-w-sm text-xs leading-5 text-slate-500">
+        {description}
+      </p>
+    </div>
+  );
+}
+
+function getActivityDisplay(activity) {
+  if (activity.type === "user") {
+    return {
+      icon: Users,
+      style: "bg-cyan-50 text-cyan-700",
+    };
+  }
+
+  if (activity.title?.toLowerCase().includes("resolved")) {
+    return {
+      icon: CheckCircle2,
+      style: "bg-emerald-50 text-emerald-700",
+    };
+  }
+
+  if (activity.priority === "Urgent") {
+    return {
+      icon: AlertTriangle,
+      style: "bg-red-50 text-red-700",
+    };
+  }
+
+  return {
+    icon: FileText,
+    style: "bg-violet-50 text-violet-700",
+  };
+}
+
+function formatNumber(value) {
+  return Number(value || 0).toLocaleString("en-IN");
+}
+
+function formatTimeAgo(dateValue) {
+  if (!dateValue) {
+    return "Recently";
+  }
+
+  const date = new Date(dateValue);
+
+  if (Number.isNaN(date.getTime())) {
+    return "Recently";
+  }
+
+  const difference = Date.now() - date.getTime();
+
+  if (difference < 0) {
+    return "Just now";
+  }
+
+  const minutes = Math.floor(difference / (1000 * 60));
+
+  if (minutes < 1) {
+    return "Just now";
+  }
+
+  if (minutes < 60) {
+    return `${minutes} minute${minutes === 1 ? "" : "s"} ago`;
+  }
+
+  const hours = Math.floor(minutes / 60);
+
+  if (hours < 24) {
+    return `${hours} hour${hours === 1 ? "" : "s"} ago`;
+  }
+
+  const days = Math.floor(hours / 24);
+
+  if (days < 30) {
+    return `${days} day${days === 1 ? "" : "s"} ago`;
+  }
+
+  return date.toLocaleDateString("en-IN", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
 }
 
 export default AdminDashboard;

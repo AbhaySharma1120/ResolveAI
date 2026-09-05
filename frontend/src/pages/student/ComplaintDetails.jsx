@@ -18,7 +18,6 @@ import {
   Paperclip,
   RefreshCw,
   Send,
-  UserRound,
   Wifi,
 } from "lucide-react";
 
@@ -28,9 +27,12 @@ const progressNames = ["New", "Assigned", "In Progress", "Resolved"];
 
 const statusPosition = {
   New: 0,
+  Submitted: 0,
   Assigned: 1,
   "In Progress": 2,
+  "Pending Student": 2,
   Resolved: 3,
+  Closed: 3,
   Rejected: 0,
   Reopened: 1,
 };
@@ -77,8 +79,22 @@ function formatTime(dateValue) {
   }).format(new Date(dateValue));
 }
 
+function formatDateTime(dateValue) {
+  if (!dateValue) {
+    return "";
+  }
+
+  return new Intl.DateTimeFormat("en-IN", {
+    day: "numeric",
+    month: "short",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(dateValue));
+}
+
 function getPriorityStyle(priority) {
   const styles = {
+    Urgent: "bg-red-50 text-red-700",
     Critical: "bg-red-50 text-red-700",
     High: "bg-orange-50 text-orange-700",
     Medium: "bg-yellow-50 text-yellow-700",
@@ -91,9 +107,12 @@ function getPriorityStyle(priority) {
 function getStatusStyle(status) {
   const styles = {
     New: "bg-gray-100 text-gray-700",
+    Submitted: "bg-gray-100 text-gray-700",
     Assigned: "bg-blue-50 text-blue-700",
     "In Progress": "bg-purple-50 text-purple-700",
+    "Pending Student": "bg-yellow-50 text-yellow-700",
     Resolved: "bg-emerald-50 text-emerald-700",
+    Closed: "bg-slate-100 text-slate-700",
     Rejected: "bg-red-50 text-red-700",
     Reopened: "bg-orange-50 text-orange-700",
   };
@@ -114,16 +133,18 @@ function ComplaintDetails() {
 
   const [errorMessage, setErrorMessage] = useState("");
 
-  /*
-    Conversation messages are currently local.
-    We will connect their backend API later.
-  */
   const [message, setMessage] = useState("");
+
   const [messages, setMessages] = useState([]);
+
+  const [isSending, setIsSending] = useState(false);
+
+  const [messageError, setMessageError] = useState("");
 
   const fetchComplaint = async () => {
     if (!complaintId) {
       setErrorMessage("Complaint tracking ID is missing.");
+
       setIsLoading(false);
       return;
     }
@@ -131,10 +152,17 @@ function ComplaintDetails() {
     try {
       setIsLoading(true);
       setErrorMessage("");
+      setMessageError("");
 
-      const response = await api.get(`/complaints/${complaintId}`);
+      const [complaintResponse, messagesResponse] = await Promise.all([
+        api.get(`/complaints/${complaintId}`),
 
-      setComplaint(response.data.complaint);
+        api.get(`/complaints/${complaintId}/messages`),
+      ]);
+
+      setComplaint(complaintResponse.data.complaint);
+
+      setMessages(messagesResponse.data.messages || []);
     } catch (error) {
       setErrorMessage(
         error.response?.data?.message ||
@@ -149,26 +177,36 @@ function ComplaintDetails() {
     fetchComplaint();
   }, [complaintId]);
 
-  const sendMessage = (event) => {
+  const sendMessage = async (event) => {
     event.preventDefault();
 
     const trimmedMessage = message.trim();
 
-    if (!trimmedMessage) {
+    if (!trimmedMessage || isSending) {
       return;
     }
 
-    setMessages((currentMessages) => [
-      ...currentMessages,
-      {
-        sender: currentUser?.name || "Student",
-        text: trimmedMessage,
-        time: "Just now",
-        own: true,
-      },
-    ]);
+    try {
+      setIsSending(true);
+      setMessageError("");
 
-    setMessage("");
+      const response = await api.post(`/complaints/${complaintId}/messages`, {
+        message: trimmedMessage,
+      });
+
+      setMessages((currentMessages) => [
+        ...currentMessages,
+        response.data.conversationMessage,
+      ]);
+
+      setMessage("");
+    } catch (error) {
+      setMessageError(
+        error.response?.data?.message || "Unable to send message.",
+      );
+    } finally {
+      setIsSending(false);
+    }
   };
 
   if (isLoading) {
@@ -286,7 +324,7 @@ function ComplaintDetails() {
 
               <span className="flex items-center gap-2">
                 <MapPin size={16} />
-                {location}
+                {location || "Campus location"}
               </span>
 
               <span className="flex items-center gap-2">
@@ -313,7 +351,7 @@ function ComplaintDetails() {
 
               <div className="min-w-0">
                 <p className="truncate text-sm font-bold text-gray-900">
-                  {complaint.department}
+                  {complaint.department || "Not assigned"}
                 </p>
 
                 <p className="mt-1 truncate text-xs text-gray-500">
@@ -496,7 +534,7 @@ function ComplaintDetails() {
                       </p>
 
                       <p className="mt-1 text-xs capitalize text-gray-400">
-                        {file.resourceType}
+                        {file.resourceType || "file"}
                       </p>
                     </div>
 
@@ -602,72 +640,109 @@ function ComplaintDetails() {
                 </div>
               )}
 
-              {messages.map((item, index) => (
-                <div
-                  key={`${item.time}-${index}`}
-                  className={`flex gap-2 ${
-                    item.own ? "flex-row-reverse" : "flex-row"
-                  }`}
-                >
+              {messages.map((item) => {
+                const senderId =
+                  item.sender?._id || item.sender?.id || item.sender;
+
+                const currentUserId = currentUser?.id || currentUser?._id;
+
+                const own = senderId?.toString() === currentUserId?.toString();
+
+                const senderName =
+                  item.sender?.name ||
+                  (own ? currentUser?.name : "Complaint Officer");
+
+                return (
                   <div
-                    className={`grid h-8 w-8 shrink-0 place-items-center rounded-full text-xs font-bold ${
-                      item.own
-                        ? "bg-emerald-100 text-emerald-700"
-                        : "bg-blue-100 text-blue-700"
+                    key={item._id}
+                    className={`flex gap-2 ${
+                      own ? "flex-row-reverse" : "flex-row"
                     }`}
                   >
-                    {item.own ? (
-                      getInitials(item.sender)
-                    ) : (
-                      <UserRound size={16} />
-                    )}
-                  </div>
+                    <div
+                      className={`grid h-8 w-8 shrink-0 place-items-center rounded-full text-xs font-bold ${
+                        own
+                          ? "bg-emerald-100 text-emerald-700"
+                          : "bg-blue-100 text-blue-700"
+                      }`}
+                      title={senderName}
+                    >
+                      {getInitials(senderName)}
+                    </div>
 
-                  <div
-                    className={`max-w-[78%] rounded-2xl px-4 py-3 ${
-                      item.own
-                        ? "rounded-tr-sm bg-emerald-700 text-white"
-                        : "rounded-tl-sm bg-white text-gray-700 shadow-sm"
-                    }`}
-                  >
-                    <p className="text-xs leading-5">{item.text}</p>
-
-                    <p
-                      className={`mt-2 text-[9px] ${
-                        item.own ? "text-emerald-100" : "text-gray-400"
+                    <div
+                      className={`max-w-[78%] rounded-2xl px-4 py-3 ${
+                        own
+                          ? "rounded-tr-sm bg-emerald-700 text-white"
+                          : "rounded-tl-sm bg-white text-gray-700 shadow-sm"
                       }`}
                     >
-                      {item.time}
-                    </p>
+                      {!own && (
+                        <p className="mb-1 text-[10px] font-bold text-blue-700">
+                          {senderName}
+                        </p>
+                      )}
+
+                      <p className="whitespace-pre-wrap break-words text-xs leading-5">
+                        {item.message}
+                      </p>
+
+                      <p
+                        className={`mt-2 text-[9px] ${
+                          own ? "text-emerald-100" : "text-gray-400"
+                        }`}
+                      >
+                        {formatDateTime(item.createdAt)}
+                      </p>
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
 
-            <form
-              onSubmit={sendMessage}
-              className="flex gap-2 border-t border-gray-100 p-4"
-            >
-              <input
-                type="text"
-                value={message}
-                onChange={(event) => setMessage(event.target.value)}
-                placeholder="Write a message..."
-                className="h-11 min-w-0 flex-1 rounded-xl border border-gray-200 px-4 text-sm outline-none focus:border-emerald-600 focus:ring-4 focus:ring-emerald-600/10"
-              />
+            {messageError && (
+              <p className="border-t border-red-100 bg-red-50 px-4 py-2 text-center text-xs font-semibold text-red-600">
+                {messageError}
+              </p>
+            )}
 
-              <button
-                type="submit"
-                className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-emerald-700 text-white hover:bg-emerald-800"
-                aria-label="Send message"
+            {complaint.status === "Closed" ? (
+              <div className="border-t border-gray-100 bg-gray-50 p-4 text-center text-xs font-semibold text-gray-500">
+                This conversation is closed.
+              </div>
+            ) : (
+              <form
+                onSubmit={sendMessage}
+                className="flex gap-2 border-t border-gray-100 p-4"
               >
-                <Send size={18} />
-              </button>
-            </form>
+                <input
+                  type="text"
+                  value={message}
+                  onChange={(event) => {
+                    setMessage(event.target.value);
 
-            <p className="border-t border-gray-100 px-4 py-2 text-center text-[10px] text-gray-400">
-              Message persistence will be connected in a later backend step.
-            </p>
+                    setMessageError("");
+                  }}
+                  placeholder="Write a message..."
+                  maxLength={2000}
+                  disabled={isSending}
+                  className="h-11 min-w-0 flex-1 rounded-xl border border-gray-200 px-4 text-sm outline-none transition focus:border-emerald-600 focus:ring-4 focus:ring-emerald-600/10 disabled:cursor-not-allowed disabled:bg-gray-100"
+                />
+
+                <button
+                  type="submit"
+                  disabled={isSending || !message.trim()}
+                  className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-emerald-700 text-white transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-50"
+                  aria-label="Send message"
+                >
+                  {isSending ? (
+                    <LoaderCircle size={18} className="animate-spin" />
+                  ) : (
+                    <Send size={18} />
+                  )}
+                </button>
+              </form>
+            )}
           </article>
         </div>
       </div>
@@ -683,7 +758,7 @@ function ClassificationValue({ label, value, valueClass = "text-gray-900" }) {
       </p>
 
       <p className={`mt-2 break-words text-sm font-bold ${valueClass}`}>
-        {value}
+        {value || "Not available"}
       </p>
     </div>
   );

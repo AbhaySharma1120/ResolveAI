@@ -12,12 +12,18 @@ import {
   updateComplaintStatus,
 } from "../controllers/complaintController.js";
 
+import {
+  getComplaintMessages,
+  sendComplaintMessage,
+} from "../controllers/complaintMessageController.js";
+
 import { authorizeRoles, protect } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 
 /*
-  Every complaint route requires a valid JWT.
+  Every complaint route requires
+  a valid JWT.
 */
 router.use(protect);
 
@@ -87,12 +93,34 @@ router.patch(
 );
 
 /*
+  Student, Officer and Admin:
+  Retrieve messages for an accessible
+  complaint.
+*/
+router.get(
+  "/:complaintId/messages",
+  authorizeRoles("student", "officer", "admin"),
+  getComplaintMessages,
+);
+
+/*
+  Student, Officer and Admin:
+  Send a message in an accessible
+  complaint conversation.
+*/
+router.post(
+  "/:complaintId/messages",
+  authorizeRoles("student", "officer", "admin"),
+  sendComplaintMessage,
+);
+
+/*
   Student:
   Can retrieve only their own complaint.
 
   Officer and Admin:
   Can retrieve complaint details.
-  
+
   Keep this dynamic route last.
 */
 router.get(

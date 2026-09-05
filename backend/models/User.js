@@ -50,9 +50,16 @@ const userSchema = new mongoose.Schema(
     designation: {
       type: String,
       trim: true,
+
       default: function () {
-        if (this.role === "student") return "Student";
-        if (this.role === "officer") return "Complaint Officer";
+        if (this.role === "student") {
+          return "Student";
+        }
+
+        if (this.role === "officer") {
+          return "Complaint Officer";
+        }
+
         return "System Administrator";
       },
     },
@@ -60,6 +67,108 @@ const userSchema = new mongoose.Schema(
     avatar: {
       type: String,
       default: "",
+    },
+
+    phone: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+
+    /*
+      This field is used by Student
+      accounts only.
+    */
+    semester: {
+      type: String,
+      enum: [
+        "",
+        "1st Semester",
+        "2nd Semester",
+        "3rd Semester",
+        "4th Semester",
+        "5th Semester",
+        "6th Semester",
+        "7th Semester",
+        "8th Semester",
+      ],
+      default: "",
+    },
+
+    notificationPreferences: {
+      /*
+        Student preferences
+      */
+      statusUpdates: {
+        type: Boolean,
+        default: true,
+      },
+
+      newMessages: {
+        type: Boolean,
+        default: true,
+      },
+
+      resolutionAlerts: {
+        type: Boolean,
+        default: true,
+      },
+
+      emailNotifications: {
+        type: Boolean,
+        default: false,
+      },
+
+      /*
+        Officer preferences
+      */
+      newComplaints: {
+        type: Boolean,
+        default: true,
+      },
+
+      urgentCases: {
+        type: Boolean,
+        default: true,
+      },
+
+      slaWarnings: {
+        type: Boolean,
+        default: true,
+      },
+
+      studentMessages: {
+        type: Boolean,
+        default: true,
+      },
+
+      dailySummary: {
+        type: Boolean,
+        default: false,
+      },
+
+      /*
+        Admin preferences
+      */
+      urgentComplaints: {
+        type: Boolean,
+        default: true,
+      },
+
+      systemErrors: {
+        type: Boolean,
+        default: true,
+      },
+
+      aiWarnings: {
+        type: Boolean,
+        default: true,
+      },
+
+      dailyReports: {
+        type: Boolean,
+        default: false,
+      },
     },
 
     isActive: {
@@ -79,19 +188,23 @@ const userSchema = new mongoose.Schema(
 
 /*
   Hash the password before saving it.
-  isModified prevents hashing the same password again
-  whenever another user field is updated.
+
+  isModified prevents hashing the same
+  password again when another field changes.
 */
 userSchema.pre("save", async function () {
-  if (!this.isModified("password")) return;
+  if (!this.isModified("password")) {
+    return;
+  }
 
   const salt = await bcrypt.genSalt(12);
+
   this.password = await bcrypt.hash(this.password, salt);
 });
 
 /*
-  Compare the submitted login password with
-  the encrypted password stored in MongoDB.
+  Compare the submitted login password
+  with the encrypted MongoDB password.
 */
 userSchema.methods.comparePassword = async function (enteredPassword) {
   return bcrypt.compare(enteredPassword, this.password);
