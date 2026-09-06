@@ -1,4 +1,5 @@
 import { useState } from "react";
+
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 
 import {
@@ -81,7 +82,6 @@ function getInitials(name = "") {
 
 function StudentLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-
   const navigate = useNavigate();
 
   const user = getStoredUser();
@@ -105,7 +105,7 @@ function StudentLayout() {
   };
 
   return (
-    <div className="min-h-screen w-full overflow-x-hidden bg-[#f7faf8]">
+    <div className="min-h-screen bg-[#f7faf8]">
       {/* Mobile overlay */}
       <div
         onClick={closeSidebar}
@@ -116,30 +116,30 @@ function StudentLayout() {
 
       {/* Sidebar */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 flex w-72 max-w-[85vw] flex-col border-r border-slate-200 bg-white transition-transform duration-300 ease-in-out lg:max-w-none lg:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-50 flex w-72 flex-col border-r border-slate-200 bg-white transition-transform duration-300 ease-in-out lg:translate-x-0 ${
           sidebarOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
         {/* Logo */}
-        <div className="flex h-20 shrink-0 items-center justify-between border-b border-slate-100 px-5">
+        <div className="flex h-20 items-center justify-between border-b border-slate-100 px-5">
           <button
             type="button"
             onClick={() => {
               navigate("/student/dashboard");
               closeSidebar();
             }}
-            className="flex min-w-0 items-center gap-3"
+            className="flex items-center gap-3"
           >
-            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-emerald-700 text-white shadow-sm">
+            <span className="grid h-11 w-11 place-items-center rounded-2xl bg-emerald-700 text-white shadow-sm">
               <ShieldCheck size={23} />
             </span>
 
-            <span className="min-w-0 text-left">
-              <span className="block truncate text-lg font-bold text-slate-900">
+            <span className="text-left">
+              <span className="block text-lg font-bold text-slate-900">
                 ResolveAI
               </span>
 
-              <span className="block truncate text-xs font-medium text-emerald-700">
+              <span className="block text-xs font-medium text-emerald-700">
                 Student Portal
               </span>
             </span>
@@ -148,7 +148,7 @@ function StudentLayout() {
           <button
             type="button"
             onClick={closeSidebar}
-            className="grid h-9 w-9 shrink-0 place-items-center rounded-xl text-slate-500 hover:bg-slate-100 lg:hidden"
+            className="grid h-9 w-9 place-items-center rounded-xl text-slate-500 hover:bg-slate-100 lg:hidden"
             aria-label="Close sidebar"
           >
             <X size={20} />
@@ -156,7 +156,7 @@ function StudentLayout() {
         </div>
 
         {/* Navigation */}
-        <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 py-5">
+        <div className="flex-1 overflow-y-auto px-4 py-5">
           <p className="px-3 text-[11px] font-bold uppercase tracking-widest text-slate-400">
             Student Workspace
           </p>
@@ -186,28 +186,26 @@ function StudentLayout() {
           </nav>
 
           {/* AI status */}
-          <div className="mt-7 overflow-hidden rounded-2xl border border-emerald-100 bg-emerald-50 p-4">
-            <div className="flex min-w-0 items-center gap-2 text-sm font-bold text-emerald-800">
-              <Bot size={17} className="shrink-0" />
-
-              <span className="truncate">AI service active</span>
+          <div className="mt-7 rounded-2xl border border-emerald-100 bg-emerald-50 p-4">
+            <div className="flex items-center gap-2 text-sm font-bold text-emerald-800">
+              <Bot size={17} />
+              AI service active
             </div>
 
-            <p className="mt-2 break-words text-xs leading-5 text-emerald-700">
+            <p className="mt-2 text-xs leading-5 text-emerald-700">
               Gemini triage and duplicate detection are operational.
             </p>
 
-            <div className="mt-3 flex min-w-0 items-center gap-2 text-[11px] font-semibold text-emerald-700">
-              <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-500" />
-
-              <span className="truncate">AI systems operational</span>
+            <div className="mt-3 flex items-center gap-2 text-[11px] font-semibold text-emerald-700">
+              <span className="h-2 w-2 rounded-full bg-emerald-500" />
+              AI systems operational
             </div>
           </div>
         </div>
 
         {/* Student profile */}
-        <div className="shrink-0 border-t border-slate-100 p-4">
-          <div className="flex min-w-0 items-center gap-3 overflow-hidden rounded-2xl bg-slate-50 p-3">
+        <div className="border-t border-slate-100 p-4">
+          <div className="flex items-center gap-3 rounded-2xl bg-slate-50 p-3">
             <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-emerald-100 text-sm font-bold text-emerald-700">
               {studentInitials}
             </span>
@@ -239,10 +237,10 @@ function StudentLayout() {
       </aside>
 
       {/* Main section */}
-      <div className="min-h-screen min-w-0 w-full overflow-x-hidden lg:pl-72">
+      <div className="min-h-screen lg:pl-72">
         {/* Header */}
-        <header className="sticky top-0 z-30 w-full min-w-0 border-b border-slate-200 bg-white/95 backdrop-blur">
-          <div className="flex min-h-20 min-w-0 items-center gap-2 px-3 sm:gap-3 sm:px-6">
+        <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur">
+          <div className="flex min-h-20 items-center gap-2 px-3 sm:gap-3 sm:px-6">
             <button
               type="button"
               onClick={() => setSidebarOpen(true)}
@@ -252,17 +250,13 @@ function StudentLayout() {
               <Menu size={21} />
             </button>
 
-            <div className="min-w-0 flex-1">
-              <HeaderTools role="student" />
-            </div>
+            <HeaderTools role="student" />
           </div>
         </header>
 
         {/* Page content */}
-        <main className="w-full min-w-0 overflow-x-hidden p-3 sm:p-6">
-          <div className="w-full min-w-0 max-w-full">
-            <Outlet context={{ user }} />
-          </div>
+        <main className="p-4 sm:p-6">
+          <Outlet context={{ user }} />
         </main>
       </div>
     </div>
@@ -277,16 +271,15 @@ function NavigationLink({ item, closeSidebar }) {
       to={item.path}
       onClick={closeSidebar}
       className={({ isActive }) =>
-        `flex min-w-0 items-center gap-3 rounded-xl px-3 py-3 text-sm font-semibold transition ${
+        `flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-semibold transition ${
           isActive
             ? "bg-emerald-700 text-white shadow-sm"
             : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
         }`
       }
     >
-      <Icon size={19} className="shrink-0" />
-
-      <span className="truncate">{item.title}</span>
+      <Icon size={19} />
+      {item.title}
     </NavLink>
   );
 }
